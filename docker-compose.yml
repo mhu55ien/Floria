@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  cv_service:
+    build: 
+      context: ./cv_service
+    container_name: floria_cv_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cv_service:/app
+    environment:
+      - ENVIRONMENT=development

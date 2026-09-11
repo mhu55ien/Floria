@@ -7,11 +7,11 @@ from collections import Counter
 app = FastAPI(title="Floria CV Microservice", version="1.0.0")
 
 def enforce_physical_constraints(labels, centers, min_cells=10):
-    """
-    Enforces the real-world build constraint: 
-    No zone can have fewer than 'min_cells' (physically unviable for a florist).
-    Merges orphaned cells into the closest dominant color zone.
-    """
+    
+    # Enforces the real-world build constraint: 
+    # No zone can have fewer than 'min_cells' (physically unviable for a florist).
+    # Merges orphaned cells into the closest dominant color zone.
+    
     counts = Counter(labels)
     valid_clusters = [k for k, v in counts.items() if v >= min_cells]
     
