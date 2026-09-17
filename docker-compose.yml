@@ -11,3 +11,17 @@ services:
       - ./cv_service:/app
     environment:
       - ENVIRONMENT=development
+
+  web:
+    build: 
+      context: ./web
+    container_name: floria_web
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_CV_API_URL=http://cv_service:8000
+    depends_on:
+      - cv_service
