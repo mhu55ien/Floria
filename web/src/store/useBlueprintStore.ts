@@ -10,11 +10,13 @@ interface BlueprintState {
   gridMatrix: number[][];
   zones: Zone[];
   activeZoneId: number | null;
+  isLoading: boolean;
   setGridMatrix: (matrix: number[][]) => void;
   setZones: (zones: Zone[]) => void;
   updateCell: (rowIndex: number, colIndex: number, zoneId: number) => void;
   setActiveZoneId: (id: number | null) => void;
   clearGrid: () => void;
+  generateBlueprint: (file: File) => Promise<void>;
 }
 
 export const useBlueprintStore = create<BlueprintState>((set) => ({
@@ -40,6 +42,7 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
     { zone_id: 8, name: 'Fern & Moss Ravine', hex_color: '#3B492B' },
   ],
   activeZoneId: null,
+  isLoading: false,
   setGridMatrix: (matrix) => set({ gridMatrix: matrix }),
   setZones: (zones) => set({ zones }),
   setActiveZoneId: (id) => set({ activeZoneId: id }),
@@ -54,4 +57,26 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
     set((state) => ({
       gridMatrix: state.gridMatrix.map((row) => row.map(() => 0)),
     })),
+  generateBlueprint: async (file: File) => {
+    set({ isLoading: true });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const url = process.env.NEXT_PUBLIC_CV_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${url}/api/v1/cv/generate-matrix`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        set({ gridMatrix: data.gridMatrix, zones: data.zones });
+      } else {
+        console.error('Failed to generate blueprint');
+      }
+    } catch (error) {
+      console.error('Error generating blueprint:', error);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 }));

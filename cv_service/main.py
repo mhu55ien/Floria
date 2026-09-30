@@ -1,85 +1,78 @@
-import cv2
+import io
+import random
 import numpy as np
-from fastapi import FastAPI, UploadFile, File, Form
-from sklearn.cluster import KMeans
-from collections import Counter
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from PIL import Image
+from ultralytics import YOLO
 
 app = FastAPI(title="Floria CV Microservice", version="1.0.0")
 
-def enforce_physical_constraints(labels, centers, min_cells=10):
-    
-    # Enforces the real-world build constraint: 
-    # No zone can have fewer than 'min_cells' (physically unviable for a florist).
-    # Merges orphaned cells into the closest dominant color zone.
-    
-    counts = Counter(labels)
-    valid_clusters = [k for k, v in counts.items() if v >= min_cells]
-    
-    # If all clusters are physically viable, return as-is
-    if len(valid_clusters) == len(centers):
-        return labels, centers
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # Map invalid clusters to the nearest valid cluster based on color distance (Euclidean)
-    mapping = {}
-    for i in range(len(centers)):
-        if i not in valid_clusters:
-            # Find the closest valid cluster
-            distances = [np.linalg.norm(centers[i] - centers[v]) for v in valid_clusters]
-            closest_valid = valid_clusters[np.argmin(distances)]
-            mapping[i] = closest_valid
-        else:
-            mapping[i] = i
-
-    # Apply the mapping to enforce the constraint
-    new_labels = np.array([mapping[label] for label in labels])
-    return new_labels, centers
+# Initialize YOLO model globally on startup
+model = YOLO('yolov8n.pt')
 
 @app.post("/api/v1/cv/generate-matrix")
-async def generate_matrix(
-    file: UploadFile = File(...), 
-    grid_resolution: int = Form(40),
-    num_colors: int = Form(5)
-):
-    # 1. Read and decode the uploaded image
+async def generate_matrix(file: UploadFile = File(...)):
+    # Read the image bytes
     contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # 2. Downsample to the physical grid resolution (e.g., 40x40 cells for large bouquet)
-    # This acts as our "pixelation" step for physical fabrication
-    small_image = cv2.resize(image, (grid_resolution, grid_resolution), interpolation=cv2.INTER_LINEAR)
     
-    # 3. Reshape for K-Means clustering
-    pixels = small_image.reshape(-1, 3)
+    # Use Pillow to read and convert to RGB
+    image = Image.open(io.BytesIO(contents))
+    image = image.convert("RGB")
     
-    # 4. Segment colors to identify flower zones
-    kmeans = KMeans(n_clusters=num_colors, random_state=42, n_init=10)
-    kmeans.fit(pixels)
-    labels = kmeans.labels_
-    centers = kmeans.cluster_centers_
-
-    # 5. Apply physical build constraints (Research Novelty)
-    constrained_labels, _ = enforce_physical_constraints(labels, centers, min_cells=10)
-
-    # 6. Reconstruct the 2D grid matrix
-    grid_matrix = constrained_labels.reshape(grid_resolution, grid_resolution).tolist()
-
-    # Format the color zones for the frontend mapping
-    zones = []
-    for idx, color in enumerate(centers):
-        hex_color = '#{:02x}{:02x}{:02x}'.format(int(color[0]), int(color[1]), int(color[2]))
-        zones.append({
-            "zone_id": idx,
-            "hex_color": hex_color,
-            "cell_count": int(np.sum(constrained_labels == idx))
-        })
+    # Convert PIL Image to NumPy array (RGB format)
+    image_array = np.array(image)
+    
+    # Pass the array to the YOLO model for inference
+    results = model(image_array)
+    
+    # Initialize an empty 8x12 grid with zeros
+    grid_rows = 8
+    grid_cols = 12
+    gridMatrix = [[0 for _ in range(grid_cols)] for _ in range(grid_rows)]
+    
+    # Dimensions of the image for spatial mapping
+    height, width, _ = image_array.shape
+    
+    # Cell dimensions in pixels
+    cell_width = width / grid_cols
+    cell_height = height / grid_rows
+    
+    # Iterate through detected bounding boxes
+    for box in results[0].boxes:
+        # Get x and y center of the detected object
+        xywh = box.xywh[0].cpu().numpy()
+        x_center, y_center = xywh[0], xywh[1]
+        
+        # Map the center point to the closest cell in our 8x12 gridMatrix
+        col = int(x_center // cell_width)
+        row = int(y_center // cell_height)
+        
+        # Ensure the calculated indices are within bounds
+        if 0 <= col < grid_cols and 0 <= row < grid_rows:
+            # Assign a random zone (1-4) to populated cells
+            gridMatrix[row][col] = random.randint(1, 4)
+            
+    zones = [
+        { "zone_id": 1, "name": "Conservatory & Palms", "hex_color": "#5B6C43" },
+        { "zone_id": 2, "name": "Medicinal Herbarium", "hex_color": "#A68B5B" },
+        { "zone_id": 3, "name": "Orchid Terrarium", "hex_color": "#8A9A65" },
+        { "zone_id": 4, "name": "Arboretum Nursery", "hex_color": "#435334" },
+        { "zone_id": 5, "name": "Central Fountain Courtyard", "hex_color": "#7F9370" },
+        { "zone_id": 6, "name": "Perennial Borders", "hex_color": "#C2A676" },
+        { "zone_id": 7, "name": "Alpine Rock Garden", "hex_color": "#657754" },
+        { "zone_id": 8, "name": "Fern & Moss Ravine", "hex_color": "#3B492B" },
+    ]
 
     return {
-        "status": "success",
-        "data": {
-            "grid_resolution": grid_resolution,
-            "grid": grid_matrix,
-            "zones": [z for z in zones if z["cell_count"] > 0] # Only return viable zones
-        }
+        "gridMatrix": gridMatrix,
+        "zones": zones
     }

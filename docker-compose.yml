@@ -1,5 +1,4 @@
-version: '3.8'
-
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
 services:
   cv_service:
     build: 
@@ -22,6 +21,8 @@ services:
       - ./web:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_CV_API_URL=http://cv_service:8000
+      - NEXT_PUBLIC_CV_API_URL=http://localhost:8000
+      - WATCHPACK_POLLING=true 
+      - CHOKIDAR_USEPOLLING=true
     depends_on:
       - cv_service

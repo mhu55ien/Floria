@@ -12,7 +12,7 @@ export const BlueprintVisualizer: React.FC<BlueprintVisualizerProps> = ({
   interactive = true,
   className = '',
 }) => {
-  const { gridMatrix, zones, updateCell, activeZoneId, setActiveZoneId } = useBlueprintStore();
+  const { gridMatrix, zones, updateCell, activeZoneId, setActiveZoneId, generateBlueprint, isLoading } = useBlueprintStore();
   const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number; zoneId: number } | null>(null);
 
   // Quick lookup dictionary for O(1) zone resolution by zone_id
@@ -40,17 +40,44 @@ export const BlueprintVisualizer: React.FC<BlueprintVisualizerProps> = ({
   return (
     <div className={`w-full rounded-2xl bg-surface border border-border p-6 shadow-sm ${className}`}>
       {/* Header & Meta Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 mb-5 border-b border-border gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-brand-primary animate-pulse" />
-            <h2 className="text-lg font-serif font-semibold text-primary tracking-tight">
-              Botanical Blueprint Visualizer
-            </h2>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between pb-5 mb-5 border-b border-border gap-4">
+        <div className="flex flex-col gap-4">
+          <label
+            className={`
+              inline-flex self-start items-center justify-center px-4 py-2 text-sm font-medium
+              rounded-lg text-white transition-all
+              ${isLoading 
+                ? 'bg-brand-secondary/80 cursor-not-allowed opacity-80' 
+                : 'bg-brand-primary hover:bg-[#4a5836] shadow-sm cursor-pointer hover:shadow-md'}
+            `}
+          >
+            {isLoading ? 'Processing Layout...' : 'Upload Image'}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={isLoading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  generateBlueprint(file);
+                }
+                // Reset value to allow uploading the same file again if needed
+                if (e.target) e.target.value = '';
+              }}
+            />
+          </label>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isLoading ? 'bg-brand-secondary animate-bounce' : 'bg-brand-primary animate-pulse'}`} />
+              <h2 className="text-lg font-serif font-semibold text-primary tracking-tight">
+                Botanical Blueprint Visualizer
+              </h2>
+            </div>
+            <p className="text-xs text-secondary mt-0.5">
+              Dimensions: {rowCount} × {colCount} slots • {zones.length} active botanical zones
+            </p>
           </div>
-          <p className="text-xs text-secondary mt-0.5">
-            Dimensions: {rowCount} × {colCount} slots • {zones.length} active botanical zones
-          </p>
         </div>
 
         {/* Status Indicator */}
